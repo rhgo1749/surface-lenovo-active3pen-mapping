@@ -19,7 +19,6 @@ namespace {
 
 constexpr wchar_t kMainWindowClass[] = L"SurfaceLenovoActive3PenMapping.Window";
 constexpr wchar_t kDiagnosticWindowClass[] = L"SurfaceLenovoActive3PenMapping.DiagnosticWindow";
-constexpr wchar_t kWindowTitle[] = L"Surface Pen Mapper";
 constexpr wchar_t kMutexName[] = L"Local\\SurfaceLenovoActive3PenMapping";
 constexpr wchar_t kRunValueName[] = L"SurfaceLenovoActive3PenMapping";
 constexpr wchar_t kConfigKey[] = L"Software\\SurfaceLenovoActive3PenMapping";
@@ -31,16 +30,17 @@ constexpr UINT kMenuSettings = 1001;
 constexpr UINT kMenuExit = 1002;
 
 constexpr UINT kUpperClickComboId = 1101;
-constexpr UINT kUpperClickHotkeyId = 1102;
+constexpr UINT kUpperClickKeyId = 1102;
 constexpr UINT kUpperTapComboId = 1103;
-constexpr UINT kUpperTapHotkeyId = 1104;
+constexpr UINT kUpperTapKeyId = 1104;
 constexpr UINT kLowerClickComboId = 1111;
-constexpr UINT kLowerClickHotkeyId = 1112;
+constexpr UINT kLowerClickKeyId = 1112;
 constexpr UINT kLowerTapComboId = 1113;
-constexpr UINT kLowerTapHotkeyId = 1114;
+constexpr UINT kLowerTapKeyId = 1114;
 constexpr UINT kStartupCheckboxId = 1120;
 constexpr UINT kApplyButtonId = 1121;
 constexpr UINT kHideButtonId = 1122;
+constexpr UINT kLanguageComboId = 1130;
 
 constexpr USAGE kDigitizerPage = 0x0D;
 constexpr USAGE kExternalPenUsage = 0x01;
@@ -51,6 +51,13 @@ constexpr USAGE kTipUsage = 0x42;
 constexpr USAGE kBarrelUsage = 0x44;
 constexpr USAGE kEraserUsage = 0x45;
 constexpr USAGE kSecondaryBarrelUsage = 0x5A;
+
+constexpr BYTE kHotkeyWin = 0x10;
+
+enum class Language : int {
+    English = 0,
+    Korean = 1,
+};
 
 enum class Action : int {
     None = 0,
@@ -69,6 +76,34 @@ enum class Gesture {
     LowerTap,
 };
 
+enum class UiText {
+    WindowTitle,
+    HeaderTitle,
+    HeaderSubtitle,
+    Language,
+    ActionColumn,
+    KeyColumn,
+    UpperGroup,
+    LowerGroup,
+    ButtonClick,
+    ClickHint,
+    HoldTap,
+    TapHint,
+    UpperNote,
+    LowerNote,
+    Startup,
+    LastInputEmpty,
+    Saved,
+    Unsaved,
+    SavedActive,
+    Apply,
+    HideTray,
+    Settings,
+    Exit,
+    PressKey,
+    SecureSequence,
+};
+
 struct Mapping {
     Action action = Action::None;
     WORD shortcutVk = 'Z';
@@ -80,6 +115,12 @@ struct Config {
     Mapping upperTap{Action::None, 'Z', HOTKEYF_CONTROL};
     Mapping lowerClick{Action::Back, 'Z', HOTKEYF_CONTROL};
     Mapping lowerTap{Action::None, 'Z', HOTKEYF_CONTROL};
+    Language language = Language::English;
+};
+
+struct KeyCaptureValue {
+    WORD vk = 'Z';
+    BYTE modifiers = HOTKEYF_CONTROL;
 };
 
 struct Options {
@@ -94,6 +135,72 @@ struct Options {
     std::wstring error;
 };
 
+Language DefaultLanguage() {
+    const LANGID lang = GetUserDefaultUILanguage();
+    return PRIMARYLANGID(lang) == LANG_KOREAN ? Language::Korean : Language::English;
+}
+
+const wchar_t* Tr(Language language, UiText text) {
+    if (language == Language::Korean) {
+        switch (text) {
+            case UiText::WindowTitle: return L"Surface 펜 매퍼";
+            case UiText::HeaderTitle: return L"펜 버튼 설정";
+            case UiText::HeaderSubtitle: return L"두 개의 사이드 버튼 × 두 가지 제스처 = 네 개의 독립 동작";
+            case UiText::Language: return L"언어";
+            case UiText::ActionColumn: return L"동작";
+            case UiText::KeyColumn: return L"키 / 단축키 (클릭 후 입력)";
+            case UiText::UpperGroup: return L"상단 사이드 버튼  ·  Barrel 0x44";
+            case UiText::LowerGroup: return L"하단 사이드 버튼  ·  Invert 0x3C";
+            case UiText::ButtonClick: return L"버튼 클릭";
+            case UiText::ClickHint: return L"화면을 터치하지 않고 눌렀다 놓기";
+            case UiText::HoldTap: return L"누른 채 화면 탭";
+            case UiText::TapHint: return L"버튼을 누른 채 펜촉으로 화면 터치";
+            case UiText::UpperNote: return L"참고: Windows의 Barrel + 펜촉 우클릭은 그대로 발생합니다. 여기 설정한 동작은 추가로 실행됩니다.";
+            case UiText::LowerNote: return L"검증 기기: Surface Pro 12 + Lenovo Active Pen 3. 필기 앱의 기본 지우개 동작도 남을 수 있습니다.";
+            case UiText::Startup: return L"Windows 로그인 시 자동으로 실행";
+            case UiText::LastInputEmpty: return L"마지막 입력: —";
+            case UiText::Saved: return L"저장됨";
+            case UiText::Unsaved: return L"저장되지 않은 변경사항";
+            case UiText::SavedActive: return L"저장됨 · 즉시 적용됨";
+            case UiText::Apply: return L"적용";
+            case UiText::HideTray: return L"트레이로 숨기기";
+            case UiText::Settings: return L"설정";
+            case UiText::Exit: return L"종료";
+            case UiText::PressKey: return L"여기를 클릭하고 원하는 키를 누르세요";
+            case UiText::SecureSequence: return L"Ctrl+Alt+Delete는 Windows 보안 시퀀스라 매핑할 수 없습니다.";
+        }
+    }
+
+    switch (text) {
+        case UiText::WindowTitle: return L"Surface Pen Mapper";
+        case UiText::HeaderTitle: return L"Map your pen";
+        case UiText::HeaderSubtitle: return L"Two side buttons × two gestures = four independent actions.";
+        case UiText::Language: return L"Language";
+        case UiText::ActionColumn: return L"Action";
+        case UiText::KeyColumn: return L"Key / shortcut (click then press)";
+        case UiText::UpperGroup: return L"UPPER SIDE BUTTON  ·  Barrel 0x44";
+        case UiText::LowerGroup: return L"LOWER SIDE BUTTON  ·  Invert 0x3C";
+        case UiText::ButtonClick: return L"Button click";
+        case UiText::ClickHint: return L"press + release without touching the screen";
+        case UiText::HoldTap: return L"Hold + tap screen";
+        case UiText::TapHint: return L"hold the button, then touch the pen tip";
+        case UiText::UpperNote: return L"Note: Windows still performs its native Barrel + tip right-click. Custom actions are additional.";
+        case UiText::LowerNote: return L"Validated: Surface Pro 12 + Lenovo Active Pen 3. Ink apps may also keep native eraser behavior.";
+        case UiText::Startup: return L"Start mapper when I sign in to Windows";
+        case UiText::LastInputEmpty: return L"Last input: —";
+        case UiText::Saved: return L"Saved";
+        case UiText::Unsaved: return L"Unsaved changes";
+        case UiText::SavedActive: return L"Saved · changes are active now";
+        case UiText::Apply: return L"Apply";
+        case UiText::HideTray: return L"Hide to tray";
+        case UiText::Settings: return L"Settings";
+        case UiText::Exit: return L"Exit";
+        case UiText::PressKey: return L"Click here, then press a key or shortcut";
+        case UiText::SecureSequence: return L"Ctrl+Alt+Delete is a protected Windows secure sequence and cannot be mapped.";
+    }
+    return L"";
+}
+
 const wchar_t* ActionName(Action action) {
     switch (action) {
         case Action::None: return L"none";
@@ -107,7 +214,19 @@ const wchar_t* ActionName(Action action) {
     return L"none";
 }
 
-const wchar_t* ActionDisplayName(Action action) {
+const wchar_t* ActionDisplayName(Language language, Action action) {
+    if (language == Language::Korean) {
+        switch (action) {
+            case Action::None: return L"추가 동작 없음 (Windows 기본 유지)";
+            case Action::Back: return L"뒤로 (Mouse 4)";
+            case Action::Forward: return L"앞으로 (Mouse 5)";
+            case Action::Left: return L"왼쪽 클릭";
+            case Action::Right: return L"오른쪽 클릭";
+            case Action::Middle: return L"가운데 클릭";
+            case Action::Shortcut: return L"키 / 단축키";
+        }
+    }
+
     switch (action) {
         case Action::None: return L"No extra action (keep Windows behavior)";
         case Action::Back: return L"Back (Mouse 4)";
@@ -115,7 +234,7 @@ const wchar_t* ActionDisplayName(Action action) {
         case Action::Left: return L"Left click";
         case Action::Right: return L"Right click";
         case Action::Middle: return L"Middle click";
-        case Action::Shortcut: return L"Keyboard shortcut";
+        case Action::Shortcut: return L"Key / shortcut";
     }
     return L"No extra action";
 }
@@ -131,7 +250,16 @@ std::optional<Action> ActionFromName(const std::wstring& value) {
     return std::nullopt;
 }
 
-const wchar_t* GestureName(Gesture gesture) {
+const wchar_t* GestureName(Language language, Gesture gesture) {
+    if (language == Language::Korean) {
+        switch (gesture) {
+            case Gesture::UpperClick: return L"상단 버튼 클릭";
+            case Gesture::UpperTap: return L"상단 버튼 + 화면 탭";
+            case Gesture::LowerClick: return L"하단 버튼 클릭";
+            case Gesture::LowerTap: return L"하단 버튼 + 화면 탭";
+        }
+    }
+
     switch (gesture) {
         case Gesture::UpperClick: return L"Upper button click";
         case Gesture::UpperTap: return L"Upper button + pen tap";
@@ -225,10 +353,9 @@ void PrintHelp() {
         L"  surface-pen-map.exe --startup-enable\n"
         L"  surface-pen-map.exe --startup-disable\n"
         L"  surface-pen-map.exe --action=back|forward|left|right|middle|none\n\n"
-        L"The UI exposes four independent gestures:\n"
-        L"  upper button click, upper button + pen tap, lower button click, lower button + pen tap.\n"
-        L"A button-click action fires on release only when no pen-tip contact occurred during that hold.\n"
-        L"Raw Input observes Windows pen behavior; it does not suppress native Barrel right-click or eraser behavior.\n");
+        L"The UI exposes four independent gestures and supports Korean/English.\n"
+        L"Key capture accepts standalone Enter/Esc/Tab/Space/Delete/arrows/F-keys and\n"
+        L"Ctrl/Alt/Shift/Win combinations. Ctrl+Alt+Delete remains protected by Windows.\n");
 }
 
 std::wstring ExecutablePath() {
@@ -262,6 +389,17 @@ bool ReadRegistryDword(HKEY key, const wchar_t* name, DWORD& value) {
            type == REG_DWORD && bytes == sizeof(value);
 }
 
+LONG WriteRegistryString(HKEY key, const std::wstring& name, const std::wstring& value) {
+    return RegSetValueExW(key, name.c_str(), 0, REG_SZ,
+        reinterpret_cast<const BYTE*>(value.c_str()),
+        static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+}
+
+LONG WriteRegistryDword(HKEY key, const std::wstring& name, DWORD value) {
+    return RegSetValueExW(key, name.c_str(), 0, REG_DWORD,
+        reinterpret_cast<const BYTE*>(&value), sizeof(value));
+}
+
 void ReadMapping(HKEY key, const wchar_t* prefix, Mapping& mapping) {
     const std::wstring actionName = std::wstring(prefix) + L"Action";
     const std::wstring vkName = std::wstring(prefix) + L"ShortcutVk";
@@ -283,6 +421,8 @@ void ReadMapping(HKEY key, const wchar_t* prefix, Mapping& mapping) {
 
 Config LoadConfig() {
     Config config;
+    config.language = DefaultLanguage();
+
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kConfigKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
         return config;
@@ -293,9 +433,14 @@ Config LoadConfig() {
     ReadMapping(key, L"LowerClick", config.lowerClick);
     ReadMapping(key, L"LowerTap", config.lowerTap);
 
+    std::wstring languageValue;
+    if (ReadRegistryString(key, L"Language", languageValue)) {
+        if (languageValue == L"ko") config.language = Language::Korean;
+        else if (languageValue == L"en") config.language = Language::English;
+    }
+
     std::wstring lowerAction;
     if (!ReadRegistryString(key, L"LowerClickAction", lowerAction)) {
-        // Migrate the first UI version: its only mapping was the lower-button action.
         std::wstring legacyAction;
         if (ReadRegistryString(key, L"Action", legacyAction)) {
             if (const auto action = ActionFromName(legacyAction)) config.lowerClick.action = *action;
@@ -311,17 +456,6 @@ Config LoadConfig() {
 
     RegCloseKey(key);
     return config;
-}
-
-LONG WriteRegistryString(HKEY key, const std::wstring& name, const std::wstring& value) {
-    return RegSetValueExW(key, name.c_str(), 0, REG_SZ,
-        reinterpret_cast<const BYTE*>(value.c_str()),
-        static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
-}
-
-LONG WriteRegistryDword(HKEY key, const std::wstring& name, DWORD value) {
-    return RegSetValueExW(key, name.c_str(), 0, REG_DWORD,
-        reinterpret_cast<const BYTE*>(&value), sizeof(value));
 }
 
 LONG WriteMapping(HKEY key, const wchar_t* prefix, const Mapping& mapping) {
@@ -349,10 +483,32 @@ bool SaveConfig(const Config& config, std::wstring& error) {
     if (result == ERROR_SUCCESS) result = WriteMapping(key, L"UpperTap", config.upperTap);
     if (result == ERROR_SUCCESS) result = WriteMapping(key, L"LowerClick", config.lowerClick);
     if (result == ERROR_SUCCESS) result = WriteMapping(key, L"LowerTap", config.lowerTap);
+    if (result == ERROR_SUCCESS) {
+        result = WriteRegistryString(key, L"Language",
+            config.language == Language::Korean ? L"ko" : L"en");
+    }
 
     RegCloseKey(key);
     if (result != ERROR_SUCCESS) {
         error = L"Could not save mapper settings. Error " + std::to_wstring(result);
+        return false;
+    }
+    return true;
+}
+
+bool SaveLanguage(Language language, std::wstring& error) {
+    HKEY key = nullptr;
+    LONG result = RegCreateKeyExW(HKEY_CURRENT_USER, kConfigKey, 0, nullptr, 0,
+        KEY_SET_VALUE, nullptr, &key, nullptr);
+    if (result != ERROR_SUCCESS) {
+        error = L"Could not open mapper settings. Error " + std::to_wstring(result);
+        return false;
+    }
+    result = WriteRegistryString(key, L"Language",
+        language == Language::Korean ? L"ko" : L"en");
+    RegCloseKey(key);
+    if (result != ERROR_SUCCESS) {
+        error = L"Could not save language setting. Error " + std::to_wstring(result);
         return false;
     }
     return true;
@@ -404,24 +560,72 @@ bool IsStartupEnabled() {
     return result == ERROR_SUCCESS;
 }
 
-std::wstring ShortcutName(const Mapping& mapping) {
-    if (mapping.action != Action::Shortcut) return ActionDisplayName(mapping.action);
+bool IsModifierKey(WORD vk) {
+    return vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT ||
+           vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL ||
+           vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU ||
+           vk == VK_LWIN || vk == VK_RWIN;
+}
+
+BYTE CurrentModifiers() {
+    BYTE result = 0;
+    if (GetKeyState(VK_SHIFT) & 0x8000) result |= HOTKEYF_SHIFT;
+    if (GetKeyState(VK_CONTROL) & 0x8000) result |= HOTKEYF_CONTROL;
+    if (GetKeyState(VK_MENU) & 0x8000) result |= HOTKEYF_ALT;
+    if ((GetKeyState(VK_LWIN) & 0x8000) || (GetKeyState(VK_RWIN) & 0x8000)) result |= kHotkeyWin;
+    return result;
+}
+
+std::wstring KeyDisplayName(WORD vk, BYTE modifiers, Language language) {
+    if (!vk) return Tr(language, UiText::PressKey);
+
+    const bool ext = (modifiers & HOTKEYF_EXT) != 0;
+    if (vk == VK_RETURN) {
+        if (ext) return language == Language::Korean ? L"숫자패드 Enter" : L"Numpad Enter";
+        return L"Enter";
+    }
+    if (vk == VK_ESCAPE) return L"Esc";
+    if (vk == VK_TAB) return L"Tab";
+    if (vk == VK_SPACE) return language == Language::Korean ? L"스페이스" : L"Space";
+    if (vk == VK_BACK) return language == Language::Korean ? L"백스페이스" : L"Backspace";
+    if (vk == VK_DELETE) return L"Delete";
+    if (vk == VK_INSERT) return L"Insert";
+    if (vk == VK_HOME) return L"Home";
+    if (vk == VK_END) return L"End";
+    if (vk == VK_PRIOR) return L"Page Up";
+    if (vk == VK_NEXT) return L"Page Down";
+    if (vk == VK_LEFT) return language == Language::Korean ? L"← 왼쪽" : L"← Left";
+    if (vk == VK_RIGHT) return language == Language::Korean ? L"오른쪽 →" : L"Right →";
+    if (vk == VK_UP) return language == Language::Korean ? L"↑ 위" : L"↑ Up";
+    if (vk == VK_DOWN) return language == Language::Korean ? L"↓ 아래" : L"↓ Down";
+    if (vk >= VK_F1 && vk <= VK_F24) {
+        return L"F" + std::to_wstring(vk - VK_F1 + 1);
+    }
+
+    wchar_t keyName[64]{};
+    UINT scanCode = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+    LONG keyInfo = static_cast<LONG>(scanCode << 16);
+    if (ext) keyInfo |= 1 << 24;
+    if (GetKeyNameTextW(keyInfo, keyName, 64) > 0) {
+        return keyName;
+    }
+
+    wchar_t fallback[16]{};
+    swprintf_s(fallback, L"VK 0x%02X", vk);
+    return fallback;
+}
+
+std::wstring ShortcutName(const Mapping& mapping, Language language) {
+    if (mapping.action != Action::Shortcut) {
+        return ActionDisplayName(language, mapping.action);
+    }
 
     std::wstring text;
     if (mapping.shortcutModifiers & HOTKEYF_CONTROL) text += L"Ctrl+";
     if (mapping.shortcutModifiers & HOTKEYF_ALT) text += L"Alt+";
     if (mapping.shortcutModifiers & HOTKEYF_SHIFT) text += L"Shift+";
-
-    wchar_t keyName[64]{};
-    UINT scanCode = MapVirtualKeyW(mapping.shortcutVk, MAPVK_VK_TO_VSC);
-    LONG keyInfo = static_cast<LONG>(scanCode << 16);
-    if (mapping.shortcutModifiers & HOTKEYF_EXT) keyInfo |= 1 << 24;
-
-    if (mapping.shortcutVk && GetKeyNameTextW(keyInfo, keyName, 64) > 0) {
-        text += keyName;
-    } else {
-        text += L"(shortcut)";
-    }
+    if (mapping.shortcutModifiers & kHotkeyWin) text += L"Win+";
+    text += KeyDisplayName(mapping.shortcutVk, mapping.shortcutModifiers, language);
     return text;
 }
 
@@ -467,19 +671,19 @@ public:
             return false;
         }
 
-        DWORD style = options_.diagnose
+        const DWORD style = options_.diagnose
             ? 0
             : (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX);
 
         hwnd_ = CreateWindowExW(
             options_.diagnose ? 0 : WS_EX_CONTROLPARENT,
             className,
-            kWindowTitle,
+            Tr(config_.language, UiText::WindowTitle),
             style,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            options_.diagnose ? 0 : 820,
-            options_.diagnose ? 0 : 650,
+            options_.diagnose ? 0 : 870,
+            options_.diagnose ? 0 : 680,
             nullptr,
             nullptr,
             instance_,
@@ -504,9 +708,6 @@ public:
             std::wprintf(L"  upper side button = 0x44 Barrel\n");
             std::wprintf(L"  lower side button = 0x3C Invert\n");
             std::wprintf(L"  pen tip contact   = 0x42 TipSwitch\n\n");
-            std::wprintf(L"Four gesture recognizer:\n");
-            std::wprintf(L"  button press+release without TipSwitch -> button click\n");
-            std::wprintf(L"  hold button, then TipSwitch rises       -> button + pen tap\n\n");
             EnumeratePenDevices();
             return true;
         }
@@ -523,7 +724,12 @@ public:
     int Run() {
         MSG message{};
         while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-            if (!options_.diagnose && IsDialogMessageW(hwnd_, &message)) continue;
+            if (!options_.diagnose) {
+                const HWND focus = GetFocus();
+                if (!IsKeyCaptureControl(focus) && IsDialogMessageW(hwnd_, &message)) {
+                    continue;
+                }
+            }
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }
@@ -541,6 +747,50 @@ private:
         }
         if (self) return self->WindowProc(message, wParam, lParam);
         return DefWindowProcW(hwnd, message, wParam, lParam);
+    }
+
+    static LRESULT CALLBACK KeyCaptureProc(
+        HWND hwnd,
+        UINT message,
+        WPARAM wParam,
+        LPARAM lParam,
+        UINT_PTR,
+        DWORD_PTR refData) {
+        auto* self = reinterpret_cast<PenMapper*>(refData);
+        switch (message) {
+            case WM_GETDLGCODE:
+                return DefSubclassProc(hwnd, message, wParam, lParam) |
+                       DLGC_WANTALLKEYS | DLGC_WANTTAB | DLGC_WANTARROWS;
+
+            case WM_KEYDOWN:
+            case WM_SYSKEYDOWN:
+                if (self) self->CaptureKey(hwnd, static_cast<WORD>(wParam), lParam);
+                return 0;
+
+            case WM_KEYUP:
+            case WM_SYSKEYUP:
+                if (self && IsModifierKey(static_cast<WORD>(wParam))) {
+                    self->UpdateKeyCaptureText(hwnd);
+                }
+                return 0;
+
+            case WM_CHAR:
+            case WM_SYSCHAR:
+            case WM_PASTE:
+            case WM_CUT:
+            case WM_CLEAR:
+            case WM_CONTEXTMENU:
+                return 0;
+
+            case WM_KILLFOCUS:
+                if (self) self->UpdateKeyCaptureText(hwnd);
+                break;
+
+            case WM_NCDESTROY:
+                RemoveWindowSubclass(hwnd, KeyCaptureProc, 1);
+                break;
+        }
+        return DefSubclassProc(hwnd, message, wParam, lParam);
     }
 
     LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
@@ -591,6 +841,8 @@ private:
     LRESULT HandleCommand(WPARAM wParam) {
         const UINT id = LOWORD(wParam);
         const UINT notify = HIWORD(wParam);
+        const HWND source = reinterpret_cast<HWND>(GetMessageExtraInfo());
+        (void)source;
 
         if (id == kMenuSettings) {
             ShowSettings();
@@ -608,18 +860,21 @@ private:
             ShowWindow(hwnd_, SW_HIDE);
             return 0;
         }
+        if (id == kLanguageComboId && notify == CBN_SELCHANGE) {
+            ChangeLanguage(SelectedLanguage());
+            return 0;
+        }
 
         const bool actionCombo =
             id == kUpperClickComboId || id == kUpperTapComboId ||
             id == kLowerClickComboId || id == kLowerTapComboId;
-        const bool hotkeyControl =
-            id == kUpperClickHotkeyId || id == kUpperTapHotkeyId ||
-            id == kLowerClickHotkeyId || id == kLowerTapHotkeyId;
 
         if (actionCombo && notify == CBN_SELCHANGE) {
-            UpdateHotkeyEnabled();
-            MarkDirty();
-        } else if (hotkeyControl && notify == EN_CHANGE) {
+            UpdateKeyCaptureEnabled();
+            if (HWND capture = CaptureForComboId(id)) {
+                HWND combo = ComboForId(id);
+                if (SelectedAction(combo) == Action::Shortcut) SetFocus(capture);
+            }
             MarkDirty();
         } else if (id == kStartupCheckboxId && notify == BN_CLICKED) {
             MarkDirty();
@@ -635,61 +890,59 @@ private:
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
 
-        CreateStatic(L"Map your pen", 28, 20, 400, 38, titleFont_);
-        CreateStatic(L"Two side buttons × two gestures = four independent actions.",
-            30, 60, 620, 24, font_);
+        title_ = CreateStatic(L"", 28, 18, 420, 38, titleFont_);
+        subtitle_ = CreateStatic(L"", 30, 56, 620, 24, font_);
+        languageLabel_ = CreateStatic(L"", 638, 25, 70, 24, font_);
+        languageCombo_ = CreateLanguageCombo(704, 20);
 
-        CreateGroup(L"UPPER SIDE BUTTON  ·  Barrel 0x44", 28, 96, 748, 190);
-        CreateStatic(L"Button click", 50, 128, 150, 24, font_);
-        CreateStatic(L"press + release without touching the screen", 50, 151, 255, 22, font_);
-        upperClickCombo_ = CreateActionCombo(kUpperClickComboId, 322, 126, config_.upperClick.action);
-        upperClickHotkey_ = CreateHotkey(kUpperClickHotkeyId, 602, 126, config_.upperClick);
+        actionHeader_ = CreateStatic(L"", 350, 78, 240, 22, font_);
+        keyHeader_ = CreateStatic(L"", 628, 78, 205, 22, font_);
 
-        CreateStatic(L"Hold + tap screen", 50, 190, 150, 24, font_);
-        CreateStatic(L"hold the button, then touch the pen tip", 50, 213, 255, 22, font_);
-        upperTapCombo_ = CreateActionCombo(kUpperTapComboId, 322, 188, config_.upperTap.action);
-        upperTapHotkey_ = CreateHotkey(kUpperTapHotkeyId, 602, 188, config_.upperTap);
+        upperGroup_ = CreateGroup(L"", 28, 100, 800, 190);
+        upperClickLabel_ = CreateStatic(L"", 50, 132, 170, 24, font_);
+        upperClickHint_ = CreateStatic(L"", 50, 155, 275, 22, font_);
+        upperClickCombo_ = CreateActionCombo(kUpperClickComboId, 340, 130, config_.upperClick.action);
+        upperClickKey_ = CreateKeyCapture(kUpperClickKeyId, 625, 130, config_.upperClick);
 
-        CreateStatic(
-            L"Note: Windows still performs its native Barrel + tip right-click. Custom hold+tap actions are additional.",
-            50, 250, 700, 24, font_);
+        upperTapLabel_ = CreateStatic(L"", 50, 194, 170, 24, font_);
+        upperTapHint_ = CreateStatic(L"", 50, 217, 275, 22, font_);
+        upperTapCombo_ = CreateActionCombo(kUpperTapComboId, 340, 192, config_.upperTap.action);
+        upperTapKey_ = CreateKeyCapture(kUpperTapKeyId, 625, 192, config_.upperTap);
+        upperNote_ = CreateStatic(L"", 50, 255, 750, 24, font_);
 
-        CreateGroup(L"LOWER SIDE BUTTON  ·  Invert 0x3C", 28, 300, 748, 190);
-        CreateStatic(L"Button click", 50, 332, 150, 24, font_);
-        CreateStatic(L"press + release without touching the screen", 50, 355, 255, 22, font_);
-        lowerClickCombo_ = CreateActionCombo(kLowerClickComboId, 322, 330, config_.lowerClick.action);
-        lowerClickHotkey_ = CreateHotkey(kLowerClickHotkeyId, 602, 330, config_.lowerClick);
+        lowerGroup_ = CreateGroup(L"", 28, 305, 800, 190);
+        lowerClickLabel_ = CreateStatic(L"", 50, 337, 170, 24, font_);
+        lowerClickHint_ = CreateStatic(L"", 50, 360, 275, 22, font_);
+        lowerClickCombo_ = CreateActionCombo(kLowerClickComboId, 340, 335, config_.lowerClick.action);
+        lowerClickKey_ = CreateKeyCapture(kLowerClickKeyId, 625, 335, config_.lowerClick);
 
-        CreateStatic(L"Hold + tap screen", 50, 394, 150, 24, font_);
-        CreateStatic(L"hold the button, then touch the pen tip", 50, 417, 255, 22, font_);
-        lowerTapCombo_ = CreateActionCombo(kLowerTapComboId, 322, 392, config_.lowerTap.action);
-        lowerTapHotkey_ = CreateHotkey(kLowerTapHotkeyId, 602, 392, config_.lowerTap);
+        lowerTapLabel_ = CreateStatic(L"", 50, 399, 170, 24, font_);
+        lowerTapHint_ = CreateStatic(L"", 50, 422, 275, 22, font_);
+        lowerTapCombo_ = CreateActionCombo(kLowerTapComboId, 340, 397, config_.lowerTap.action);
+        lowerTapKey_ = CreateKeyCapture(kLowerTapKeyId, 625, 397, config_.lowerTap);
+        lowerNote_ = CreateStatic(L"", 50, 460, 750, 24, font_);
 
-        CreateStatic(
-            L"Validated hardware: Surface Pro 12 + Lenovo Active Pen 3. Ink apps may also keep native eraser behavior.",
-            50, 454, 700, 24, font_);
-
-        startupCheckbox_ = CreateWindowExW(0, WC_BUTTONW,
-            L"Start mapper when I sign in to Windows",
+        startupCheckbox_ = CreateWindowExW(0, WC_BUTTONW, L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-            32, 512, 350, 28, hwnd_, reinterpret_cast<HMENU>(kStartupCheckboxId), instance_, nullptr);
+            32, 515, 430, 28, hwnd_, reinterpret_cast<HMENU>(kStartupCheckboxId), instance_, nullptr);
         SetControlFont(startupCheckbox_, font_);
         SendMessageW(startupCheckbox_, BM_SETCHECK,
             IsStartupEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
 
-        lastInput_ = CreateStatic(L"Last input: —", 32, 548, 520, 24, font_);
-        saveStatus_ = CreateStatic(L"Saved", 32, 579, 420, 24, font_);
+        lastInput_ = CreateStatic(L"", 32, 550, 520, 24, font_);
+        saveStatus_ = CreateStatic(L"", 32, 582, 430, 24, font_);
 
-        HWND apply = CreateWindowExW(0, WC_BUTTONW, L"Apply",
+        applyButton_ = CreateWindowExW(0, WC_BUTTONW, L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-            570, 558, 96, 36, hwnd_, reinterpret_cast<HMENU>(kApplyButtonId), instance_, nullptr);
-        HWND hide = CreateWindowExW(0, WC_BUTTONW, L"Hide to tray",
+            610, 558, 96, 36, hwnd_, reinterpret_cast<HMENU>(kApplyButtonId), instance_, nullptr);
+        hideButton_ = CreateWindowExW(0, WC_BUTTONW, L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            676, 558, 100, 36, hwnd_, reinterpret_cast<HMENU>(kHideButtonId), instance_, nullptr);
-        SetControlFont(apply, font_);
-        SetControlFont(hide, font_);
+            716, 558, 112, 36, hwnd_, reinterpret_cast<HMENU>(kHideButtonId), instance_, nullptr);
+        SetControlFont(applyButton_, font_);
+        SetControlFont(hideButton_, font_);
 
-        UpdateHotkeyEnabled();
+        UpdateKeyCaptureEnabled();
+        ApplyLocalization();
     }
 
     HWND CreateStatic(const wchar_t* text, int x, int y, int width, int height, HFONT font) {
@@ -700,11 +953,12 @@ private:
         return control;
     }
 
-    void CreateGroup(const wchar_t* text, int x, int y, int width, int height) {
+    HWND CreateGroup(const wchar_t* text, int x, int y, int width, int height) {
         HWND control = CreateWindowExW(0, WC_BUTTONW, text,
             WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             x, y, width, height, hwnd_, nullptr, instance_, nullptr);
         SetControlFont(control, font_);
+        return control;
     }
 
     static void SetControlFont(HWND control, HFONT font) {
@@ -713,20 +967,47 @@ private:
         }
     }
 
+    HWND CreateLanguageCombo(int x, int y) {
+        HWND combo = CreateWindowExW(0, WC_COMBOBOXW, nullptr,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
+            x, y, 124, 100, hwnd_, reinterpret_cast<HMENU>(kLanguageComboId), instance_, nullptr);
+        SetControlFont(combo, font_);
+
+        const LRESULT ko = SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"한국어"));
+        SendMessageW(combo, CB_SETITEMDATA, ko, static_cast<LPARAM>(Language::Korean));
+        const LRESULT en = SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"English"));
+        SendMessageW(combo, CB_SETITEMDATA, en, static_cast<LPARAM>(Language::English));
+        SelectLanguageInCombo(combo, config_.language);
+        return combo;
+    }
+
+    void SelectLanguageInCombo(HWND combo, Language language) {
+        const LRESULT count = SendMessageW(combo, CB_GETCOUNT, 0, 0);
+        for (LRESULT index = 0; index < count; ++index) {
+            const auto value = static_cast<Language>(SendMessageW(combo, CB_GETITEMDATA, index, 0));
+            if (value == language) {
+                SendMessageW(combo, CB_SETCURSEL, index, 0);
+                break;
+            }
+        }
+    }
+
+    Language SelectedLanguage() const {
+        const LRESULT index = SendMessageW(languageCombo_, CB_GETCURSEL, 0, 0);
+        if (index == CB_ERR) return config_.language;
+        return static_cast<Language>(SendMessageW(languageCombo_, CB_GETITEMDATA, index, 0));
+    }
+
     void AddActionToCombo(HWND combo, Action action) {
         const LRESULT index = SendMessageW(combo, CB_ADDSTRING, 0,
-            reinterpret_cast<LPARAM>(ActionDisplayName(action)));
+            reinterpret_cast<LPARAM>(ActionDisplayName(config_.language, action)));
         if (index >= 0) {
             SendMessageW(combo, CB_SETITEMDATA, index, static_cast<LPARAM>(action));
         }
     }
 
-    HWND CreateActionCombo(UINT id, int x, int y, Action selected) {
-        HWND combo = CreateWindowExW(0, WC_COMBOBOXW, nullptr,
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
-            x, y, 265, 220, hwnd_, reinterpret_cast<HMENU>(id), instance_, nullptr);
-        SetControlFont(combo, font_);
-
+    void PopulateActionCombo(HWND combo, Action selected) {
+        SendMessageW(combo, CB_RESETCONTENT, 0, 0);
         AddActionToCombo(combo, Action::None);
         AddActionToCombo(combo, Action::Back);
         AddActionToCombo(combo, Action::Forward);
@@ -740,85 +1021,248 @@ private:
             const auto action = static_cast<Action>(SendMessageW(combo, CB_GETITEMDATA, index, 0));
             if (action == selected) {
                 SendMessageW(combo, CB_SETCURSEL, index, 0);
-                return combo;
+                return;
             }
         }
         SendMessageW(combo, CB_SETCURSEL, 0, 0);
+    }
+
+    HWND CreateActionCombo(UINT id, int x, int y, Action selected) {
+        HWND combo = CreateWindowExW(0, WC_COMBOBOXW, nullptr,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+            x, y, 270, 220, hwnd_, reinterpret_cast<HMENU>(id), instance_, nullptr);
+        SetControlFont(combo, font_);
+        PopulateActionCombo(combo, selected);
         return combo;
     }
 
-    HWND CreateHotkey(UINT id, int x, int y, const Mapping& mapping) {
-        HWND control = CreateWindowExW(WS_EX_CLIENTEDGE, HOTKEY_CLASSW, nullptr,
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            x, y, 150, 28, hwnd_, reinterpret_cast<HMENU>(id), instance_, nullptr);
+    HWND CreateKeyCapture(UINT id, int x, int y, const Mapping& mapping) {
+        HWND control = CreateWindowExW(WS_EX_CLIENTEDGE, WC_EDITW, L"",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_CENTER,
+            x, y, 203, 28, hwnd_, reinterpret_cast<HMENU>(id), instance_, nullptr);
         SetControlFont(control, font_);
-        SendMessageW(control, HKM_SETHOTKEY,
-            MAKEWORD(mapping.shortcutVk, mapping.shortcutModifiers), 0);
+        SetWindowSubclass(control, KeyCaptureProc, 1, reinterpret_cast<DWORD_PTR>(this));
+        keyCaptures_[control] = KeyCaptureValue{mapping.shortcutVk, mapping.shortcutModifiers};
+        UpdateKeyCaptureText(control);
         return control;
     }
 
     Action SelectedAction(HWND combo) const {
+        if (!combo) return Action::None;
         const LRESULT index = SendMessageW(combo, CB_GETCURSEL, 0, 0);
         if (index == CB_ERR) return Action::None;
         return static_cast<Action>(SendMessageW(combo, CB_GETITEMDATA, index, 0));
     }
 
-    Mapping MappingFromControls(HWND combo, HWND hotkey) const {
+    HWND ComboForId(UINT id) const {
+        switch (id) {
+            case kUpperClickComboId: return upperClickCombo_;
+            case kUpperTapComboId: return upperTapCombo_;
+            case kLowerClickComboId: return lowerClickCombo_;
+            case kLowerTapComboId: return lowerTapCombo_;
+        }
+        return nullptr;
+    }
+
+    HWND CaptureForComboId(UINT id) const {
+        switch (id) {
+            case kUpperClickComboId: return upperClickKey_;
+            case kUpperTapComboId: return upperTapKey_;
+            case kLowerClickComboId: return lowerClickKey_;
+            case kLowerTapComboId: return lowerTapKey_;
+        }
+        return nullptr;
+    }
+
+    bool IsKeyCaptureControl(HWND control) const {
+        return control &&
+            (control == upperClickKey_ || control == upperTapKey_ ||
+             control == lowerClickKey_ || control == lowerTapKey_);
+    }
+
+    Mapping MappingFromControls(HWND combo, HWND keyCapture) const {
         Mapping mapping;
         mapping.action = SelectedAction(combo);
-        const LRESULT value = SendMessageW(hotkey, HKM_GETHOTKEY, 0, 0);
-        mapping.shortcutVk = LOBYTE(value);
-        mapping.shortcutModifiers = HIBYTE(value);
+        const auto found = keyCaptures_.find(keyCapture);
+        if (found != keyCaptures_.end()) {
+            mapping.shortcutVk = found->second.vk;
+            mapping.shortcutModifiers = found->second.modifiers;
+        }
         return mapping;
     }
 
-    void UpdateHotkeyEnabled() {
+    void UpdateKeyCaptureEnabled() {
         if (!upperClickCombo_) return;
-        EnableWindow(upperClickHotkey_, SelectedAction(upperClickCombo_) == Action::Shortcut);
-        EnableWindow(upperTapHotkey_, SelectedAction(upperTapCombo_) == Action::Shortcut);
-        EnableWindow(lowerClickHotkey_, SelectedAction(lowerClickCombo_) == Action::Shortcut);
-        EnableWindow(lowerTapHotkey_, SelectedAction(lowerTapCombo_) == Action::Shortcut);
+        EnableWindow(upperClickKey_, SelectedAction(upperClickCombo_) == Action::Shortcut);
+        EnableWindow(upperTapKey_, SelectedAction(upperTapCombo_) == Action::Shortcut);
+        EnableWindow(lowerClickKey_, SelectedAction(lowerClickCombo_) == Action::Shortcut);
+        EnableWindow(lowerTapKey_, SelectedAction(lowerTapCombo_) == Action::Shortcut);
+    }
+
+    void CaptureKey(HWND control, WORD vk, LPARAM lParam) {
+        if (!IsKeyCaptureControl(control)) return;
+
+        if (IsModifierKey(vk)) {
+            std::wstring preview;
+            const BYTE modifiers = CurrentModifiers();
+            if (modifiers & HOTKEYF_CONTROL) preview += L"Ctrl+";
+            if (modifiers & HOTKEYF_ALT) preview += L"Alt+";
+            if (modifiers & HOTKEYF_SHIFT) preview += L"Shift+";
+            if (modifiers & kHotkeyWin) preview += L"Win+";
+            preview += L"…";
+            SetWindowTextW(control, preview.c_str());
+            return;
+        }
+
+        BYTE modifiers = CurrentModifiers();
+        if ((static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 24)) != 0) {
+            modifiers |= HOTKEYF_EXT;
+        }
+
+        keyCaptures_[control] = KeyCaptureValue{vk, modifiers};
+        UpdateKeyCaptureText(control);
+        MarkDirty();
+    }
+
+    void UpdateKeyCaptureText(HWND control) {
+        const auto found = keyCaptures_.find(control);
+        if (found == keyCaptures_.end()) return;
+
+        Mapping mapping;
+        mapping.action = Action::Shortcut;
+        mapping.shortcutVk = found->second.vk;
+        mapping.shortcutModifiers = found->second.modifiers;
+        const std::wstring text = ShortcutName(mapping, config_.language);
+        SetWindowTextW(control, text.c_str());
+    }
+
+    void RefreshCaptureTexts() {
+        UpdateKeyCaptureText(upperClickKey_);
+        UpdateKeyCaptureText(upperTapKey_);
+        UpdateKeyCaptureText(lowerClickKey_);
+        UpdateKeyCaptureText(lowerTapKey_);
     }
 
     void MarkDirty() {
-        if (saveStatus_) SetWindowTextW(saveStatus_, L"Unsaved changes");
+        dirty_ = true;
+        savedActive_ = false;
+        UpdateSaveStatusText();
     }
 
-    bool ValidateShortcut(const Mapping& mapping, const wchar_t* gestureName) {
-        if (mapping.action != Action::Shortcut || mapping.shortcutVk != 0) return true;
-        const std::wstring message = std::wstring(L"Choose a keyboard shortcut for ") + gestureName + L".";
-        MessageBoxW(hwnd_, message.c_str(), kWindowTitle, MB_OK | MB_ICONWARNING);
-        return false;
+    void UpdateSaveStatusText() {
+        if (!saveStatus_) return;
+        if (dirty_) SetWindowTextW(saveStatus_, Tr(config_.language, UiText::Unsaved));
+        else if (savedActive_) SetWindowTextW(saveStatus_, Tr(config_.language, UiText::SavedActive));
+        else SetWindowTextW(saveStatus_, Tr(config_.language, UiText::Saved));
+    }
+
+    bool ValidateShortcut(const Mapping& mapping, Gesture gesture) {
+        if (mapping.action != Action::Shortcut) return true;
+        if (!mapping.shortcutVk) {
+            const std::wstring message =
+                std::wstring(config_.language == Language::Korean ? L"키 또는 단축키를 지정하세요: " : L"Choose a key or shortcut for: ") +
+                GestureName(config_.language, gesture);
+            MessageBoxW(hwnd_, message.c_str(), Tr(config_.language, UiText::WindowTitle), MB_OK | MB_ICONWARNING);
+            return false;
+        }
+
+        const bool ctrl = (mapping.shortcutModifiers & HOTKEYF_CONTROL) != 0;
+        const bool alt = (mapping.shortcutModifiers & HOTKEYF_ALT) != 0;
+        if (mapping.shortcutVk == VK_DELETE && ctrl && alt) {
+            MessageBoxW(hwnd_, Tr(config_.language, UiText::SecureSequence),
+                Tr(config_.language, UiText::WindowTitle), MB_OK | MB_ICONWARNING);
+            return false;
+        }
+        return true;
     }
 
     void ApplySettings() {
         Config next;
-        next.upperClick = MappingFromControls(upperClickCombo_, upperClickHotkey_);
-        next.upperTap = MappingFromControls(upperTapCombo_, upperTapHotkey_);
-        next.lowerClick = MappingFromControls(lowerClickCombo_, lowerClickHotkey_);
-        next.lowerTap = MappingFromControls(lowerTapCombo_, lowerTapHotkey_);
+        next.language = config_.language;
+        next.upperClick = MappingFromControls(upperClickCombo_, upperClickKey_);
+        next.upperTap = MappingFromControls(upperTapCombo_, upperTapKey_);
+        next.lowerClick = MappingFromControls(lowerClickCombo_, lowerClickKey_);
+        next.lowerTap = MappingFromControls(lowerTapCombo_, lowerTapKey_);
 
-        if (!ValidateShortcut(next.upperClick, L"Upper button click") ||
-            !ValidateShortcut(next.upperTap, L"Upper button + pen tap") ||
-            !ValidateShortcut(next.lowerClick, L"Lower button click") ||
-            !ValidateShortcut(next.lowerTap, L"Lower button + pen tap")) {
+        if (!ValidateShortcut(next.upperClick, Gesture::UpperClick) ||
+            !ValidateShortcut(next.upperTap, Gesture::UpperTap) ||
+            !ValidateShortcut(next.lowerClick, Gesture::LowerClick) ||
+            !ValidateShortcut(next.lowerTap, Gesture::LowerTap)) {
             return;
         }
 
         std::wstring error;
         if (!SaveConfig(next, error)) {
-            MessageBoxW(hwnd_, error.c_str(), kWindowTitle, MB_OK | MB_ICONERROR);
+            MessageBoxW(hwnd_, error.c_str(), Tr(config_.language, UiText::WindowTitle), MB_OK | MB_ICONERROR);
             return;
         }
 
         const bool startup = SendMessageW(startupCheckbox_, BM_GETCHECK, 0, 0) == BST_CHECKED;
         if (!SetStartup(startup, error)) {
-            MessageBoxW(hwnd_, error.c_str(), kWindowTitle, MB_OK | MB_ICONERROR);
+            MessageBoxW(hwnd_, error.c_str(), Tr(config_.language, UiText::WindowTitle), MB_OK | MB_ICONERROR);
             return;
         }
 
         config_ = next;
-        SetWindowTextW(saveStatus_, L"Saved · changes are active now");
+        dirty_ = false;
+        savedActive_ = true;
+        UpdateSaveStatusText();
+        UpdateLastInputText();
+        UpdateTrayTip();
+    }
+
+    void ChangeLanguage(Language language) {
+        if (language == config_.language) return;
+        config_.language = language;
+
+        std::wstring error;
+        if (!SaveLanguage(language, error)) {
+            MessageBoxW(hwnd_, error.c_str(), Tr(config_.language, UiText::WindowTitle), MB_OK | MB_ICONERROR);
+        }
+        ApplyLocalization();
+    }
+
+    void RefreshActionCombo(HWND combo) {
+        if (!combo) return;
+        const Action selected = SelectedAction(combo);
+        PopulateActionCombo(combo, selected);
+    }
+
+    void ApplyLocalization() {
+        SetWindowTextW(hwnd_, Tr(config_.language, UiText::WindowTitle));
+        SetWindowTextW(title_, Tr(config_.language, UiText::HeaderTitle));
+        SetWindowTextW(subtitle_, Tr(config_.language, UiText::HeaderSubtitle));
+        SetWindowTextW(languageLabel_, Tr(config_.language, UiText::Language));
+        SetWindowTextW(actionHeader_, Tr(config_.language, UiText::ActionColumn));
+        SetWindowTextW(keyHeader_, Tr(config_.language, UiText::KeyColumn));
+
+        SetWindowTextW(upperGroup_, Tr(config_.language, UiText::UpperGroup));
+        SetWindowTextW(lowerGroup_, Tr(config_.language, UiText::LowerGroup));
+
+        SetWindowTextW(upperClickLabel_, Tr(config_.language, UiText::ButtonClick));
+        SetWindowTextW(lowerClickLabel_, Tr(config_.language, UiText::ButtonClick));
+        SetWindowTextW(upperClickHint_, Tr(config_.language, UiText::ClickHint));
+        SetWindowTextW(lowerClickHint_, Tr(config_.language, UiText::ClickHint));
+        SetWindowTextW(upperTapLabel_, Tr(config_.language, UiText::HoldTap));
+        SetWindowTextW(lowerTapLabel_, Tr(config_.language, UiText::HoldTap));
+        SetWindowTextW(upperTapHint_, Tr(config_.language, UiText::TapHint));
+        SetWindowTextW(lowerTapHint_, Tr(config_.language, UiText::TapHint));
+
+        SetWindowTextW(upperNote_, Tr(config_.language, UiText::UpperNote));
+        SetWindowTextW(lowerNote_, Tr(config_.language, UiText::LowerNote));
+        SetWindowTextW(startupCheckbox_, Tr(config_.language, UiText::Startup));
+        SetWindowTextW(applyButton_, Tr(config_.language, UiText::Apply));
+        SetWindowTextW(hideButton_, Tr(config_.language, UiText::HideTray));
+
+        SelectLanguageInCombo(languageCombo_, config_.language);
+        RefreshActionCombo(upperClickCombo_);
+        RefreshActionCombo(upperTapCombo_);
+        RefreshActionCombo(lowerClickCombo_);
+        RefreshActionCombo(lowerTapCombo_);
+        RefreshCaptureTexts();
+        UpdateKeyCaptureEnabled();
+        UpdateSaveStatusText();
+        UpdateLastInputText();
         UpdateTrayTip();
     }
 
@@ -838,20 +1282,31 @@ private:
         return config_.lowerClick;
     }
 
+    void UpdateLastInputText() {
+        if (!lastInput_) return;
+        if (!lastGesture_) {
+            SetWindowTextW(lastInput_, Tr(config_.language, UiText::LastInputEmpty));
+            return;
+        }
+
+        const Mapping& mapping = MappingForGesture(*lastGesture_);
+        const std::wstring prefix = config_.language == Language::Korean ? L"마지막 입력: " : L"Last input: ";
+        const std::wstring message = prefix + GestureName(config_.language, *lastGesture_) +
+            L" → " + ShortcutName(mapping, config_.language);
+        SetWindowTextW(lastInput_, message.c_str());
+    }
+
     void TriggerGesture(Gesture gesture) {
         const Mapping& mapping = MappingForGesture(gesture);
         if (options_.diagnose) {
-            std::wprintf(L"  gesture: %ls\n", GestureName(gesture));
+            std::wprintf(L"  gesture: %ls\n", GestureName(Language::English, gesture));
             std::fflush(stdout);
             return;
         }
 
         SendAction(mapping);
-        if (lastInput_) {
-            const std::wstring message = L"Last input: " + std::wstring(GestureName(gesture)) +
-                L" → " + ShortcutName(mapping);
-            SetWindowTextW(lastInput_, message.c_str());
-        }
+        lastGesture_ = gesture;
+        UpdateLastInputText();
     }
 
     static void SendMouse(DWORD downFlag, DWORD upFlag, DWORD data = 0) {
@@ -876,8 +1331,9 @@ private:
     static void SendShortcut(const Mapping& mapping) {
         if (!mapping.shortcutVk) return;
         std::vector<INPUT> inputs;
-        inputs.reserve(8);
+        inputs.reserve(10);
 
+        if (mapping.shortcutModifiers & kHotkeyWin) AddKeyInput(inputs, VK_LWIN);
         if (mapping.shortcutModifiers & HOTKEYF_CONTROL) AddKeyInput(inputs, VK_CONTROL);
         if (mapping.shortcutModifiers & HOTKEYF_ALT) AddKeyInput(inputs, VK_MENU);
         if (mapping.shortcutModifiers & HOTKEYF_SHIFT) AddKeyInput(inputs, VK_SHIFT);
@@ -889,6 +1345,7 @@ private:
         if (mapping.shortcutModifiers & HOTKEYF_SHIFT) AddKeyInput(inputs, VK_SHIFT, KEYEVENTF_KEYUP);
         if (mapping.shortcutModifiers & HOTKEYF_ALT) AddKeyInput(inputs, VK_MENU, KEYEVENTF_KEYUP);
         if (mapping.shortcutModifiers & HOTKEYF_CONTROL) AddKeyInput(inputs, VK_CONTROL, KEYEVENTF_KEYUP);
+        if (mapping.shortcutModifiers & kHotkeyWin) AddKeyInput(inputs, VK_LWIN, KEYEVENTF_KEYUP);
 
         SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
     }
@@ -1159,7 +1616,9 @@ private:
     void UpdateTrayTip() {
         if (!trayAdded_) return;
         tray_.uFlags = NIF_TIP;
-        const std::wstring tooltip = L"Surface Pen Mapper · four gesture mappings";
+        const std::wstring tooltip = config_.language == Language::Korean
+            ? L"Surface 펜 매퍼 · 4개 제스처"
+            : L"Surface Pen Mapper · four gesture mappings";
         wcsncpy_s(tray_.szTip, _countof(tray_.szTip), tooltip.c_str(), _TRUNCATE);
         Shell_NotifyIconW(NIM_MODIFY, &tray_);
         tray_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
@@ -1178,9 +1637,9 @@ private:
         HMENU menu = CreatePopupMenu();
         if (!menu) return;
 
-        AppendMenuW(menu, MF_STRING, kMenuSettings, L"Settings");
+        AppendMenuW(menu, MF_STRING, kMenuSettings, Tr(config_.language, UiText::Settings));
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(menu, MF_STRING, kMenuExit, L"Exit");
+        AppendMenuW(menu, MF_STRING, kMenuExit, Tr(config_.language, UiText::Exit));
 
         SetForegroundWindow(hwnd_);
         TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
@@ -1192,7 +1651,7 @@ private:
     void ReportError(const wchar_t* message, DWORD error) const {
         const std::wstring text = std::wstring(message) + L". Error " + std::to_wstring(error);
         if (options_.diagnose) std::fwprintf(stderr, L"%ls\n", text.c_str());
-        else MessageBoxW(nullptr, text.c_str(), kWindowTitle, MB_OK | MB_ICONERROR);
+        else MessageBoxW(nullptr, text.c_str(), Tr(config_.language, UiText::WindowTitle), MB_OK | MB_ICONERROR);
     }
 
     Options options_;
@@ -1202,17 +1661,45 @@ private:
     HFONT font_ = nullptr;
     HFONT titleFont_ = nullptr;
 
+    HWND title_ = nullptr;
+    HWND subtitle_ = nullptr;
+    HWND languageLabel_ = nullptr;
+    HWND languageCombo_ = nullptr;
+    HWND actionHeader_ = nullptr;
+    HWND keyHeader_ = nullptr;
+
+    HWND upperGroup_ = nullptr;
+    HWND upperClickLabel_ = nullptr;
+    HWND upperClickHint_ = nullptr;
+    HWND upperTapLabel_ = nullptr;
+    HWND upperTapHint_ = nullptr;
+    HWND upperNote_ = nullptr;
+
+    HWND lowerGroup_ = nullptr;
+    HWND lowerClickLabel_ = nullptr;
+    HWND lowerClickHint_ = nullptr;
+    HWND lowerTapLabel_ = nullptr;
+    HWND lowerTapHint_ = nullptr;
+    HWND lowerNote_ = nullptr;
+
     HWND upperClickCombo_ = nullptr;
-    HWND upperClickHotkey_ = nullptr;
+    HWND upperClickKey_ = nullptr;
     HWND upperTapCombo_ = nullptr;
-    HWND upperTapHotkey_ = nullptr;
+    HWND upperTapKey_ = nullptr;
     HWND lowerClickCombo_ = nullptr;
-    HWND lowerClickHotkey_ = nullptr;
+    HWND lowerClickKey_ = nullptr;
     HWND lowerTapCombo_ = nullptr;
-    HWND lowerTapHotkey_ = nullptr;
+    HWND lowerTapKey_ = nullptr;
     HWND startupCheckbox_ = nullptr;
     HWND lastInput_ = nullptr;
     HWND saveStatus_ = nullptr;
+    HWND applyButton_ = nullptr;
+    HWND hideButton_ = nullptr;
+
+    std::unordered_map<HWND, KeyCaptureValue> keyCaptures_;
+    std::optional<Gesture> lastGesture_;
+    bool dirty_ = false;
+    bool savedActive_ = false;
 
     NOTIFYICONDATAW tray_{};
     bool trayAdded_ = false;
