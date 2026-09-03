@@ -30,4 +30,8 @@ if(MSVC)
         /utf-8
         /EHsc
     )
+    target_link_options(surface-pen-map PRIVATE
+        "/MANIFEST:EMBED"
+        "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/app.manifest"
+    )
 endif()
