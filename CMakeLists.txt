@@ -19,6 +19,7 @@ target_link_libraries(surface-pen-map PRIVATE
     user32
     shell32
     advapi32
+    comctl32
 )
 
 if(MSVC)
