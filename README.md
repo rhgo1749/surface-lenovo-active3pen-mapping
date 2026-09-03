@@ -15,7 +15,9 @@ A tiny native Windows utility that turns a two-button active pen into a more use
 
 ## Download
 
-Download the latest `surface-pen-map-arm64.zip` from **GitHub Releases**, extract it, and run `surface-pen-map.exe`.
+For normal users, download `surface-pen-map-arm64.zip` from **GitHub Releases**, extract it, and run `surface-pen-map.exe`.
+
+> If there is no Release yet, the project is still in pre-release testing. Maintainers can publish one by pushing a version tag such as `v0.1.0`.
 
 No installer, Wacom tablet driver, .NET runtime, or kernel driver is required.
 
