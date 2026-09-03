@@ -38,7 +38,7 @@ Each of the four gesture slots can be mapped to:
 - Left click
 - Right click
 - Middle click
-- a custom keyboard shortcut using `Ctrl`, `Alt`, and/or `Shift` plus a key
+- any captured key or shortcut
 
 Default mappings:
 
@@ -50,6 +50,37 @@ Lower button + pen tap  -> no extra action
 ```
 
 The UI includes a **Last input** line so the physical gesture recognized by the mapper can be checked without opening diagnostic mode.
+
+### Full key capture
+
+The old Windows `HOTKEY_CLASS` control has been removed. Shortcut fields are now custom key-capture controls, so they can accept keys that the stock hot-key control normally reserves for dialog navigation.
+
+Examples that can be mapped directly:
+
+- `Enter`
+- `Esc`
+- `Tab`
+- `Space`
+- `Backspace`
+- `Delete`
+- arrow keys
+- `Home`, `End`, `Page Up`, `Page Down`, `Insert`
+- `F1` through `F24`
+- letters, numbers, OEM keys
+- combinations using `Ctrl`, `Alt`, `Shift`, and `Win`
+
+Click a key field and press the desired key or shortcut. While a key field has focus, `Enter`, `Esc`, and `Tab` are captured instead of being treated as dialog commands.
+
+`Ctrl+Alt+Delete` is intentionally rejected because it is a protected Windows secure-attention sequence and cannot be generated through normal `SendInput`.
+
+### 한국어 / English
+
+The settings window has a language selector in the upper-right corner:
+
+- `한국어`
+- `English`
+
+Changing the language updates the settings window, action names, status text, tray menu, tray tooltip, and recognized-gesture text immediately. The selection is persisted per user and restored on the next launch. If no language has been saved yet, Korean Windows defaults to Korean and other Windows UI languages default to English.
 
 Settings are stored per-user under:
 
@@ -157,12 +188,6 @@ The UI checkbox is the preferred method, but the CLI remains available:
 ```
 
 This only creates/removes one value under the current user's standard Windows `Run` registry key. No service is installed.
-
-## Shortcut limitations
-
-The settings UI uses the native Windows HOTKEY control. It supports ordinary keys with `Ctrl`, `Alt`, and `Shift` modifiers.
-
-Windows-key combinations and protected secure sequences such as `Ctrl+Alt+Delete` are intentionally not supported.
 
 ## References
 
