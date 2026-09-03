@@ -1,0 +1,37 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  arm64-release:
+    name: Build and publish Windows ARM64
+    runs-on: windows-11-vs2026-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 18 2026" -A ARM64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item build/Release/surface-pen-map.exe dist/surface-pen-map.exe
+          Compress-Archive -Path dist/surface-pen-map.exe -DestinationPath surface-pen-map-arm64.zip -Force
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: surface-pen-map-arm64.zip
+          generate_release_notes: true
