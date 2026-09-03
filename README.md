@@ -1,201 +1,52 @@
-# surface-lenovo-active3pen-mapping
+# Surface Pen Mapper
 
-A tiny native Windows utility for using a two-button active pen as a better mouse replacement on Surface devices.
+A tiny native Windows utility that turns a two-button active pen into a more useful mouse/shortcut controller.
 
-The initial target is **Surface Pro 12 + Lenovo Active Pen 3 over MPP**. That combination has been hardware-validated:
+**Tested hardware:** Surface Pro 12 + Lenovo Active Pen 3 (MPP)
 
-```text
-upper side button -> 0x44 (Barrel)
-lower side button -> 0x3C (Invert)
-pen tip contact   -> 0x42 (TipSwitch)
-hover             -> 0x32 (InRange)
-```
+> Other Windows MPP pens may also work. If you try another device, feedback is welcome.
 
-No Wacom tablet driver, virtual tablet driver, .NET runtime, or kernel driver is required.
+## Guides
 
-## Four independent gestures
+- [한국어](docs/README.ko.md)
+- [English](docs/README.en.md)
+- [日本語](docs/README.ja.md)
+- [简体中文](docs/README.zh-CN.md)
 
-The mapper combines each physical side-button state with the pen-tip state, so a two-button pen exposes four user-configurable gestures:
+## Download
 
-1. **Upper button click** — press and release the upper button without touching the screen.
-2. **Upper button + pen tap** — hold the upper button, then touch the pen tip to the screen.
-3. **Lower button click** — press and release the lower button without touching the screen.
-4. **Lower button + pen tap** — hold the lower button, then touch the pen tip to the screen.
+Download the latest `surface-pen-map-arm64.zip` from **GitHub Releases**, extract it, and run `surface-pen-map.exe`.
 
-The recognizer makes the gestures mutually exclusive. A button-click action fires on button release only if no `TipSwitch (0x42)` occurred during that hold. If the tip touches the screen while the button is held, the corresponding `button + pen tap` action fires instead and the later button release does not also fire the button-click action.
+No installer, Wacom tablet driver, .NET runtime, or kernel driver is required.
 
-Repeated tip taps while continuing to hold a side button can fire the hold+tap action repeatedly.
+## What you can map
 
-## Settings UI
+A two-button pen provides four independent gestures:
 
-Double-click `surface-pen-map.exe` to open the native settings window. It presents the **Upper side button** and **Lower side button** as separate sections, with an independent action selector for both `Button click` and `Hold + tap screen`.
+| Gesture | Example |
+| --- | --- |
+| Upper button click | Enter |
+| Upper button + tap screen | Right click / shortcut |
+| Lower button click | Back |
+| Lower button + tap screen | Esc |
 
-Each of the four gesture slots can be mapped to:
+Each gesture can be assigned to Back, Forward, left/right/middle click, a key or shortcut, or no extra action.
 
-- No extra action / keep Windows behavior
-- Back (`Mouse XBUTTON1`)
-- Forward (`Mouse XBUTTON2`)
-- Left click
-- Right click
-- Middle click
-- any captured key or shortcut
+Keys such as **Enter, Esc, Tab, Space, Delete, arrow keys, F1–F24**, and combinations using **Ctrl / Alt / Shift / Win** are supported.
 
-Default mappings:
+## Notes
 
-```text
-Upper button click      -> no extra action
-Upper button + pen tap  -> no extra action (Windows native right-click remains)
-Lower button click      -> Back / Mouse 4
-Lower button + pen tap  -> no extra action
-```
+- Closing the settings window hides the mapper to the system tray.
+- Enable **Start with Windows** in the app if you want it to run automatically.
+- Windows may still keep its native pen behavior for some hold+tap gestures (for example the upper-button right-click behavior).
 
-The UI includes a **Last input** line so the physical gesture recognized by the mapper can be checked without opening diagnostic mode.
-
-### Full key capture
-
-The old Windows `HOTKEY_CLASS` control has been removed. Shortcut fields are now custom key-capture controls, so they can accept keys that the stock hot-key control normally reserves for dialog navigation.
-
-Examples that can be mapped directly:
-
-- `Enter`
-- `Esc`
-- `Tab`
-- `Space`
-- `Backspace`
-- `Delete`
-- arrow keys
-- `Home`, `End`, `Page Up`, `Page Down`, `Insert`
-- `F1` through `F24`
-- letters, numbers, OEM keys
-- combinations using `Ctrl`, `Alt`, `Shift`, and `Win`
-
-Click a key field and press the desired key or shortcut. While a key field has focus, `Enter`, `Esc`, and `Tab` are captured instead of being treated as dialog commands.
-
-`Ctrl+Alt+Delete` is intentionally rejected because it is a protected Windows secure-attention sequence and cannot be generated through normal `SendInput`.
-
-### 한국어 / English
-
-The settings window has a language selector in the upper-right corner:
-
-- `한국어`
-- `English`
-
-Changing the language updates the settings window, action names, status text, tray menu, tray tooltip, and recognized-gesture text immediately. The selection is persisted per user and restored on the next launch. If no language has been saved yet, Korean Windows defaults to Korean and other Windows UI languages default to English.
-
-Settings are stored per-user under:
-
-```text
-HKCU\Software\SurfaceLenovoActive3PenMapping
-```
-
-The UI also has a **Start mapper when I sign in to Windows** checkbox. Startup uses the current executable path with `--background`, so Windows sign-in does not pop the settings window open.
-
-### Native Windows behavior is not suppressed
-
-This utility observes HID Raw Input and emits an additional configured action. It does **not** replace or suppress the Windows pen stack.
-
-In particular, Windows uses `Barrel (0x44)` to modify pen-tip behavior into a native secondary/right action. Therefore **Upper button + pen tap** still produces Windows' normal right-click behavior; a custom mapping in that slot is additional.
-
-Likewise, software that interprets `Invert/Eraser` as an eraser may retain that native behavior while a custom **Lower button + pen tap** action is also emitted.
-
-## How it works
-
-Windows pen devices expose a HID Digitizer pen collection. This utility registers for Raw Input from integrated/external pen collections and tracks these usages:
-
-- `0x44` — Barrel / upper side button
-- `0x3C` — Invert / validated lower button signal on the target hardware
-- `0x45` — Eraser fallback
-- `0x5A` — Secondary Barrel fallback
-- `0x42` — TipSwitch / pen-tip contact
-- `0x32` — InRange / hover
-
-The current-state transitions are used to recognize the four gestures, then the configured extra action is emitted with `SendInput`.
+For uncommon device problems, see [Troubleshooting](docs/TROUBLESHOOTING.md).
 
 ## Build
-
-Requirements:
-
-- Windows 11
-- Visual Studio with Desktop C++ / Windows SDK
-- CMake 3.24+
-
-ARM64 build:
 
 ```powershell
 cmake -S . -B build -A ARM64
 cmake --build build --config Release
 ```
 
-The executable will be under:
-
-```text
-build\Release\surface-pen-map.exe
-```
-
-The repository also has a GitHub Actions build that compiles natively on a Windows 11 ARM64 runner and publishes the executable as an artifact.
-
-## Diagnose pen signals and gestures
-
-Diagnostic mode can run alongside the normal mapper and never emits mapped input:
-
-```powershell
-.\surface-pen-map.exe --diagnose
-```
-
-Try all four patterns:
-
-1. upper button press/release
-2. upper button held while tapping the pen tip
-3. lower button press/release
-4. lower button held while tapping the pen tip
-
-The console prints the raw active HID usages and the recognized gesture.
-
-## Run modes
-
-Normal launch opens the settings UI:
-
-```powershell
-.\surface-pen-map.exe
-```
-
-Start silently in the background:
-
-```powershell
-.\surface-pen-map.exe --background
-```
-
-The legacy `--action=` option remains as a temporary runtime override for the **Lower button click** mapping:
-
-```powershell
-.\surface-pen-map.exe --action=back
-.\surface-pen-map.exe --action=forward
-.\surface-pen-map.exe --action=left
-.\surface-pen-map.exe --action=right
-.\surface-pen-map.exe --action=middle
-.\surface-pen-map.exe --action=none
-```
-
-A tray icon is shown while the mapper is running. Left-click it to open Settings; right-click it for Settings/Exit. Closing the settings window hides it to the tray.
-
-## Start with Windows from the CLI
-
-The UI checkbox is the preferred method, but the CLI remains available:
-
-```powershell
-.\surface-pen-map.exe --startup-enable
-.\surface-pen-map.exe --startup-disable
-```
-
-This only creates/removes one value under the current user's standard Windows `Run` registry key. No service is installed.
-
-## References
-
-- Microsoft: Supporting Usages in Digitizer Report Descriptors
-  - https://learn.microsoft.com/windows-hardware/design/component-guidelines/supporting-usages-in-digitizer-report-descriptors
-- Microsoft: Required HID Top-Level Collections for Windows Pen
-  - https://learn.microsoft.com/windows-hardware/design/component-guidelines/required-hid-top-level-collections
-- Microsoft: Raw Input
-  - https://learn.microsoft.com/windows/win32/inputdev/raw-input
-- Microsoft: Using Raw Input
-  - https://learn.microsoft.com/windows/win32/inputdev/using-raw-input
+The project is intentionally kept as a small native Win32 executable.
