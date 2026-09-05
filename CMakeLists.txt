@@ -21,6 +21,8 @@ target_link_libraries(surface-pen-map PRIVATE
     shell32
     advapi32
     comctl32
+    ole32
+    windowscodecs
 )
 
 if(MSVC)
