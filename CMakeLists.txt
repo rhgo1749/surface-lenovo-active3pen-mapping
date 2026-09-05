@@ -21,6 +21,7 @@ target_link_libraries(surface-pen-map PRIVATE
     shell32
     advapi32
     comctl32
+    crypt32
     ole32
     windowscodecs
 )
